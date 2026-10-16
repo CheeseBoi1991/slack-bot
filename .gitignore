@@ -2,3 +2,6 @@ node_modules
 .vercel
 .env
 .env*.local
+
+# Personal instructions to Claude Code — not course material
+CLAUDE.local.md

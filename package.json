@@ -3,5 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Slack bot that replies in-thread with a random number when mentioned"
+  "description": "Slack bot that runs your prompt through Claude Code in an E2B sandbox and replies in-thread",
+  "scripts": {
+    "template:build": "node e2b/build.js"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.7.5",
+    "e2b": "^2.35.1"
+  },
+  "comment:overrides": "e2b depends on chalk ^5 (ESM-only). Vercel's bundler rewrites e2b's lazy import('chalk') into require('chalk'), which ESM chalk rejects (ERR_REQUIRE_ESM) and crashes the function at load. chalk is only used for e2b's build logs, never on the request path, so pinning to the CommonJS v4 line is safe and makes require() work.",
+  "overrides": {
+    "chalk": "^4.1.2"
+  }
 }

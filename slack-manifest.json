@@ -1,7 +1,7 @@
 {
   "display_information": {
     "name": "Joestar",
-    "description": "Tag me and I'll reply in the thread with a random number.",
+    "description": "Tag me with a prompt and I'll run it through Claude Code and reply in the thread.",
     "background_color": "#4a154b"
   },
   "features": {

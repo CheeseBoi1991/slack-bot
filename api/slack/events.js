@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
 
+import { waitUntil } from "@vercel/functions";
+
+import { runClaude } from "../../lib/claude-sandbox.js";
+
 const SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 const BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const MIN = Number(process.env.RANDOM_MIN ?? 1);
-const MAX = Number(process.env.RANDOM_MAX ?? 100);
+
+// Slack renders roughly 4k characters before truncating; leave room for the
+// note we append when we cut something off.
+const MAX_REPLY_CHARS = 3800;
 
 /**
  * Reads the untouched request body. Signature verification hashes the exact
@@ -40,18 +46,67 @@ function isValidSlackRequest(rawBody, timestamp, signature) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-async function postThreadReply(channel, threadTs, text) {
-  const res = await fetch("https://slack.com/api/chat.postMessage", {
+async function slackApi(method, body) {
+  const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       Authorization: `Bearer ${BOT_TOKEN}`,
     },
-    body: JSON.stringify({ channel, thread_ts: threadTs, text }),
+    body: JSON.stringify(body),
   });
 
   const data = await res.json();
-  if (!data.ok) console.error("chat.postMessage failed:", data.error);
+  if (!data.ok) console.error(`${method} failed:`, data.error);
+  return data;
+}
+
+/**
+ * Turns the raw `app_mention` text into the prompt the user actually typed:
+ * drops the `<@BOT>` mentions, unwraps Slack's link markup, and undoes the
+ * three entities Slack escapes.
+ */
+function extractPrompt(text = "") {
+  return text
+    .replace(/<@[A-Z0-9]+>/gi, " ")
+    .replace(/<(https?:[^|>]+)\|[^>]*>/gi, "$1")
+    .replace(/<(https?:[^>]+)>/gi, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncate(text) {
+  if (text.length <= MAX_REPLY_CHARS) return text;
+  return `${text.slice(0, MAX_REPLY_CHARS)}\n\n_…truncated._`;
+}
+
+/**
+ * Everything past the Slack ack. Posts a placeholder immediately so the thread
+ * shows progress, then edits it in place with whatever Claude came back with —
+ * a sandbox run takes minutes, which is far too long to leave a mention silent.
+ */
+async function replyWithClaude({ channel, threadTs, prompt }) {
+  const placeholder = await slackApi("chat.postMessage", {
+    channel,
+    thread_ts: threadTs,
+    text: "🧠 Thinking…",
+  });
+
+  const update = (text) =>
+    placeholder.ok
+      ? slackApi("chat.update", { channel, ts: placeholder.ts, text })
+      : slackApi("chat.postMessage", { channel, thread_ts: threadTs, text });
+
+  try {
+    const { text } = await runClaude(prompt);
+    await update(truncate(text || "_Claude returned an empty response._"));
+  } catch (err) {
+    console.error("Claude run failed:", err);
+    await update(`:warning: ${truncate(err.message)}`);
+  }
 }
 
 function send(res, status, body) {
@@ -88,18 +143,32 @@ export default async function handler(req, res) {
     return send(res, 200, { challenge: payload.challenge });
   }
 
-  // Slack retries if we're slow; don't post a duplicate number.
+  // Slack retries if we're slow, and a Claude run is always slower than its
+  // 3s patience. Without this every mention would start a second sandbox.
   if (req.headers["x-slack-retry-num"]) return send(res, 200);
 
   const event = payload.event;
+
   if (event?.type === "app_mention" && !event.bot_id) {
-    const number = crypto.randomInt(MIN, MAX + 1);
-    // Reply inside the existing thread if there is one, otherwise start one.
-    await postThreadReply(
-      event.channel,
-      event.thread_ts ?? event.ts,
-      `🎲 ${number}`,
+    const prompt = extractPrompt(event.text);
+    const channel = event.channel;
+    const threadTs = event.thread_ts ?? event.ts;
+
+    // Ack first, work second. Slack gives us 3 seconds; the sandbox needs
+    // minutes, so the run has to outlive the response.
+    send(res, 200);
+
+    waitUntil(
+      prompt
+        ? replyWithClaude({ channel, threadTs, prompt })
+        : slackApi("chat.postMessage", {
+            channel,
+            thread_ts: threadTs,
+            text: "Tag me with a prompt and I'll run it, e.g. `@Joestar explain what a monad is`.",
+          }),
     );
+
+    return;
   }
 
   return send(res, 200);
