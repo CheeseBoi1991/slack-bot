@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/slack/events.js": {
-      "maxDuration": 800
+      "maxDuration": 300
     }
   }
 }
