@@ -14,7 +14,12 @@
     "scopes": {
       "bot": [
         "app_mentions:read",
-        "chat:write"
+        "channels:history",
+        "chat:write",
+        "files:read",
+        "files:write",
+        "groups:history",
+        "reactions:write"
       ]
     }
   },
@@ -22,7 +27,9 @@
     "event_subscriptions": {
       "request_url": "https://slack-bot-phi.vercel.app/api/slack/events",
       "bot_events": [
-        "app_mention"
+        "app_mention",
+        "message.channels",
+        "message.groups"
       ]
     },
     "org_deploy_enabled": false,
