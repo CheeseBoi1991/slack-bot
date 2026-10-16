@@ -16,6 +16,7 @@ Set these in Vercel (Project → Settings → Environment Variables). Env change
 | `CLAUDE_CODE_OAUTH_TOKEN`  | From `claude setup-token`; runs bill against the subscription, not API credit          |
 | `E2B_TEMPLATE`             | Optional. Sandbox template name (default `claude-code`)                                |
 | `CLAUDE_TIMEOUT_MS`        | Optional. Max time for one Claude run (default 10 minutes)                             |
+| `EXA_API_KEY`              | Optional. https://dashboard.exa.ai — gives the agent the [Exa](https://docs.exa.ai/reference/exa-mcp) web-search MCP server |
 | `GITHUB_APP_ID`            | Optional. Numeric App ID. See [GitHub access](#github-access)                          |
 | `GITHUB_INSTALLATION_ID`   | Optional. Numeric installation ID (the number at the end of the install's settings URL) |
 | `GITHUB_APP_PRIVATE_KEY`   | Optional. The App's `.pem`, **base64-encoded onto a single line** — not the raw PEM    |
