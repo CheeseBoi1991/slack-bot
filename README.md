@@ -14,6 +14,7 @@ Set these in Vercel (Project → Settings → Environment Variables). Env change
 | `SLACK_BOT_TOKEN`          | Slack app → OAuth & Permissions → Bot User OAuth Token (`xoxb-…`)                      |
 | `E2B_API_KEY`              | https://e2b.dev/dashboard                                                              |
 | `CLAUDE_CODE_OAUTH_TOKEN`  | From `claude setup-token`; runs bill against the subscription, not API credit          |
+| `EXA_API_KEY`              | Optional. Exa MCP (web search) is always on; a key lifts the free-tier rate limit|
 | `E2B_TEMPLATE`             | Optional. Sandbox template name (default `claude-code`)                                |
 | `CLAUDE_TIMEOUT_MS`        | Optional. Max time for one Claude run (default 10 minutes)                             |
 | `GITHUB_APP_ID`            | Optional. Numeric App ID. See [GitHub access](#github-access)                          |
