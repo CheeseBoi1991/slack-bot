@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 
 import { BusyError, runClaude } from "../../lib/claude-sandbox.js";
+import { isGithubConfigured, mintInstallationToken } from "../../lib/github.js";
 import { toMrkdwn } from "../../lib/mrkdwn.js";
 import {
   addReaction,
@@ -178,7 +179,7 @@ function safeName(name, index) {
  * replies twice, once here and once from the session. Repetitive, not incorrect;
  * narrowing the replay to "since my last reply" is a separate change.
  */
-function buildPrompt({ prompt, transcript, inputPaths }) {
+function buildPrompt({ prompt, transcript, inputPaths, github }) {
   const parts = [];
 
   if (transcript) {
@@ -199,11 +200,56 @@ function buildPrompt({ prompt, transcript, inputPaths }) {
     "To send a file or image back to the user, write it into /tmp/outputs/ — every file left in that directory is uploaded to the Slack thread after you finish.",
   );
 
+  // Told up front so the model doesn't spend minutes rediscovering the walls by
+  // running into them. Absent entirely when GitHub isn't set up, so a bot
+  // without the feature never mentions it.
+  if (github === "ready") {
+    parts.push(
+      "GitHub access: `git` and `gh` are authenticated through GH_TOKEN for this turn only — the token expires in about an hour. You can clone, branch, commit, push a NEW branch, open pull requests and read issues in the repositories this installation was granted. You cannot push to the default branch (it is protected and needs a reviewed PR), force-push, delete branches, or touch .github/workflows/. Always work on a branch and open a PR: push the branch BEFORE `gh pr create`, and read the repo's actual default branch (e.g. `gh repo view --json defaultBranchRef`) for the PR base instead of assuming `main`. Never print or write down the token.",
+    );
+  } else if (github === "unavailable") {
+    parts.push(
+      "GitHub access is unavailable this turn (the credential could not be created). Do not attempt git or gh operations against GitHub; say so if the user asks for them.",
+    );
+  }
+
   parts.push(
     `The user's message:\n${prompt || "Please look at the attached file(s) and respond."}`,
   );
 
   return parts.join("\n\n");
+}
+
+/**
+ * Mints this request's GitHub token, if the feature is set up at all.
+ *
+ * EAGER, on every request, not lazy on a GitHub-looking prompt. Lazy would mean
+ * keyword-sniffing, and a threaded follow-up like "now open a PR for that" has
+ * no keyword at all. The cost of eager is one ~300ms API call, on a path that
+ * already runs for minutes after the Slack ack (we are inside waitUntil), so it
+ * buys correctness for next to nothing. The token is minted per request and not
+ * cached across warm invocations — see lib/github.js.
+ *
+ * FAILS SOFT. Three outcomes, kept distinct on purpose:
+ *   - not configured → no token, no note: the feature is simply off.
+ *   - minted         → token, model told what it can do.
+ *   - configured but broken → no token, and a visible note in the reply.
+ * A broken App must not take down answers that never needed GitHub.
+ *
+ * @returns {Promise<{token?: string, state?: "ready"|"unavailable", note?: string}>}
+ */
+async function prepareGithub() {
+  if (!isGithubConfigured()) return {};
+  try {
+    return { token: await mintInstallationToken(), state: "ready" };
+  } catch (err) {
+    // err.message carries GitHub's status and message, never a token.
+    console.error("GitHub token mint failed:", err.message);
+    return {
+      state: "unavailable",
+      note: `:warning: GitHub access is unavailable this turn (${truncate(err.message)}).`,
+    };
+  }
 }
 
 /**
@@ -222,7 +268,8 @@ async function respond({ event, channel, threadTs, prompt, files, transcript }) 
     inputPaths.push(`/tmp/inputs/${name}`);
   }
 
-  const finalPrompt = buildPrompt({ prompt, transcript, inputPaths });
+  const github = await prepareGithub();
+  const finalPrompt = buildPrompt({ prompt, transcript, inputPaths, github: github.state });
   const ts = await postThinking({ channel, threadTs });
 
   try {
@@ -231,13 +278,19 @@ async function respond({ event, channel, threadTs, prompt, files, transcript }) 
       inputFiles,
       channelId: channel,
       threadTs,
+      githubToken: github.token,
     });
     const body = text
       ? toMrkdwn(text)
       : outputFiles.length
         ? "_Done — see the attached file(s)._"
         : "_Claude returned an empty response._";
-    await finalize({ channel, threadTs, ts, text: truncate(body) });
+    await finalize({
+      channel,
+      threadTs,
+      ts,
+      text: truncate(github.note ? `${body}\n\n${github.note}` : body),
+    });
 
     for (const out of outputFiles) {
       try {

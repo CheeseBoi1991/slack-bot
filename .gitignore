@@ -3,5 +3,8 @@ node_modules
 .env
 .env*.local
 
+# GitHub App private keys must never be committed
+*.pem
+
 # Personal instructions to Claude Code — not course material
 CLAUDE.local.md
