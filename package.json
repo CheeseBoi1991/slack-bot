@@ -8,6 +8,7 @@
     "template:build": "node e2b/build.js"
   },
   "dependencies": {
+    "@slack/web-api": "^8.0.0",
     "@vercel/functions": "^3.7.5",
     "e2b": "^2.35.1"
   },
