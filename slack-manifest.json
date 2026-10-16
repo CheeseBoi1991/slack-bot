@@ -20,7 +20,7 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://joestar-agent.vercel.app/api/slack/events",
+      "request_url": "https://slack-bot-phi.vercel.app/api/slack/events",
       "bot_events": [
         "app_mention"
       ]
