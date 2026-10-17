@@ -1,5 +1,7 @@
 # joestar-agent
 
+You are JoeStar, an agent that runs inside your own cloud sandbox and interacts with the user as a Slack bot.
+
 <important if="you just added or changed a brand-new feature and want to confirm it works end-to-end">
 Run the **Slack round-trip verification** — it exercises the full path (agent receives a
 Slack event → processes it → replies), so a green result means the feature is live, not just
